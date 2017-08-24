@@ -122,6 +122,18 @@ uint32_t get_num_hugepages()
 	return num_pages;	
 }
 
+static int cmp_physaddr(const void *p1, const void *p2)
+{	
+	hugepage_file *a = (hugepage_file*)p1;
+	hugepage_file *b = (hugepage_file*)p2;
+	
+	if(a->physaddr < b->physaddr)
+		return -1;
+	else if(a->physaddr > b->physaddr)
+		return 1;
+	return 0;
+}
+
 //map hugepage file into userspace
 uint32_t map_hugepages(hugepage_file *hpf, uint32_t number, uint64_t hugepage_sz)
 {
@@ -152,6 +164,7 @@ uint32_t map_hugepages(hugepage_file *hpf, uint32_t number, uint64_t hugepage_sz
 			return i;
 		}	
 	}
+	qsort(hpf, number, sizeof(hugepage_file), cmp_physaddr);
 	
 	return i;
 }
