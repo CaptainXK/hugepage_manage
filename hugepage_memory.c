@@ -19,15 +19,15 @@ uint64_t virt_to_phys(void * addr)
 	int fd_pgmap;
 			
 	page_size = getpagesize();
-	fd_pgmap = open("/proc/self/pagemap", O_RDONLY);
+	fd_pgmap = open("/proc/self/pagemap", O_RDONLY);//this file is a list of 64 bits' element, each element represent a page value
 	if(fd_pgmap < 0 ){
 		perror("Can not open pagemap file:");
 		return 0;
 	}
 		
-	virt_pfn = (unsigned long)addr / page_size;//calculate virtual page frame number
-	offset = sizeof(uint64_t) * virt_pfn;//calculate offset
-	if(lseek(fd_pgmap, offset, SEEK_SET) == (off_t) - 1){
+	virt_pfn = (unsigned long)addr / page_size;//virt_pfn is page frame number, that is the index of the page value for addr 
+	offset = sizeof(uint64_t) * virt_pfn;//sizeof(uint64_t) is the size of element in file "/proc/self/pagemap", so index multiple size is the start of wanted element
+	if(lseek(fd_pgmap, offset, SEEK_SET) == (off_t) - 1){//read the page value
 		perror("seek error in pagemap:");
 		goto EXIT;
 	}	
