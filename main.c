@@ -7,8 +7,9 @@
 #include <linux/limits.h>//PATH_MAX
 #include "hugepage_memory.h"
 
-#define MAX_LENGTH 10*1024*1024 //10MB
-#define TEST_HUGEPAGE_PATH "/mnt/hugepages/mem0"
+//#define MAX_LENGTH 10*1024*1024 //10MB
+//#define TEST_HUGEPAGE_PATH "/mnt/hugepages/mem0"
+#define HUGEPAGE_DIR "/mnt/hugepages"
 
 int main(int argc, char** argv){
 	int fd, fd_zero;
@@ -30,9 +31,10 @@ int main(int argc, char** argv){
 	num_pages = get_num_hugepages();
 	if(num_pages == 0)
 	{
-		printf("No hugepages available");
+		printf("No hugepages available...\n");
 		return 0;
 	}
+	clean_hugepages(HUGEPAGE_DIR);
 	
 	tmp_hp = malloc(num_pages * sizeof(hugepage_file));
 	if(tmp_hp == NULL)
@@ -48,6 +50,7 @@ int main(int argc, char** argv){
 	else{
 		printf("hugepage files init done...\n");
 	}
+/*
 	for(i=0; i<num_pages; i++)
 	{
 		printf("file path:%s\n",tmp_hp[i].file_path);
@@ -55,7 +58,7 @@ int main(int argc, char** argv){
 		printf("physical addr:%lu\n\n",tmp_hp[i].physaddr);
 		unlink(tmp_hp[i].file_path);
 	}			
-
+*/
 /*
 	//try to map a contiguous virtaddri space with given length
 	fd_zero = open("/dev/zero",O_RDONLY);

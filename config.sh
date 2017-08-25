@@ -2,6 +2,7 @@
 
 huge_mnt_path="/mnt/hugepages"
 
+#test if dir exit
 if [ ! -x $huge_mnt_path ]
 then
 	mkdir $huge_mnt_path

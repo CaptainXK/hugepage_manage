@@ -6,7 +6,6 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-
 uint64_t virt_to_phys(void * addr);
 
 //map virtaddr to physaddr
@@ -42,7 +41,7 @@ uint64_t virt_to_phys(void * addr)
 		goto EXIT;
 	}
 	close(fd_pgmap);
-	physaddr = ((page & 0x7fffffffffffffULL) * page_size) + ((unsigned long)addr % page_size);
+	physaddr = ((page & 0x7fffffffffffffULL) << 12) + ((unsigned long)addr % page_size);
 	
 	return physaddr;
 EXIT:
@@ -141,11 +140,12 @@ uint32_t map_hugepages(hugepage_file *hpf, uint32_t number, uint64_t hugepage_sz
 	int fd;
 	void * virtaddr;
 	void * vma_addr = NULL;
+	int memseg_num=0;
 	
 	for(i=0; i<number; i++){
 		hpf[i].file_id = i;
 		memset(hpf[i].file_path, 0, sizeof(hpf[i].file_path));
-		sprintf(hpf[i].file_path, "/mnt/hugepages/hugepage_map%u", hpf[i].file_id);
+		sprintf(hpf[i].file_path, "/mnt/hugepages/xk_map%u", hpf[i].file_id);
 		hpf[i].file_path[sizeof(hpf[i].file_path)-1] = '\0';
 		fd = open(hpf[i].file_path, O_CREAT | O_RDWR, 0600);
 		if(fd<0){
@@ -165,6 +165,66 @@ uint32_t map_hugepages(hugepage_file *hpf, uint32_t number, uint64_t hugepage_sz
 		}	
 	}
 	qsort(hpf, number, sizeof(hugepage_file), cmp_physaddr);
-	
+	for(i=0; i<number; i++){
+		if(i == 0){
+			memseg_num += 1;
+			continue;
+		}
+		if((hpf[i].physaddr-hpf[i-1].physaddr) != hugepage_sz){
+			memseg_num += 1;
+		}
+		else if((hpf[i].addr-hpf[i-1].addr) != hugepage_sz){
+			memseg_num += 1;
+		}
+	}	
+	printf("%d memseg in total...\n", memseg_num);
+
 	return i;
+}
+
+//clean dir
+int clean_hugepages(const char * huge_dir){
+	DIR *dir;
+	struct dirent *dirent;
+	int dir_fd, fd;
+	const char filter[] = "*xk_map*";
+	int lock_ret;	
+
+	dir = opendir(huge_dir);
+	if(!dir){
+		perror("Unable to open hugepage dir:");
+		return 1;
+	}
+	
+	dirent = readdir(dir);
+	if(!dirent){
+		perror("Unable to read hugepage dir:");
+		return 1;
+	}	
+	while(!dirent){
+		if( fnmatch(filter, dirent->d_name, 0) > 0){
+			dirent = readdir(dir);
+			continue;
+		}
+		//try and lock the file
+		fd = openat(dir_fd, dirent->d_name, O_RDONLY);
+		
+		//go to next file if fail
+		if(fd == -1){
+			dirent = readdir(dir);
+			continue;
+		}
+		
+        //try non_block lock
+		lock_ret = flock(fd, LOCK_EX|LOCK_NB);
+		
+		if(lock_ret != -1){
+			//unlock and remove it
+			flock(fd, LOCK_UN);
+			unlinkat(dir_fd, dirent->d_name, 0);
+		}
+		close(fd);
+		dirent = readdir(dir);			
+	}
+	return 0;
 }
