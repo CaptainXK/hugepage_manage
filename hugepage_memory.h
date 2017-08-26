@@ -3,9 +3,11 @@
 #include "sysfs_ops.h"
 #include <stdlib.h>//strtoul
 #include <dirent.h>
-//#include <fnctl.h>
 #include <fnmatch.h>//fnmatch()
 #include <sys/file.h>//flock()
+
+#define HUGEPAGE_DIR "/mnt/hugepages"
+#define ALIGN_ADDR(x,a) ((x + (a-1))&(~(a-1)))
 
 struct hugepage_file{
 	void * addr;

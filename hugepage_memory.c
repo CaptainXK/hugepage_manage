@@ -7,6 +7,38 @@
 #include <fcntl.h>
 
 uint64_t virt_to_phys(void * addr);
+void * try_virt_area(size_t *size, size_t hugepage_sz);
+
+//find a virt addr space with length of given size
+void * try_virt_area(size_t *size, size_t hugepage_sz)
+{
+	void *addr=0;
+	int fd;
+	long aligned_addr;
+
+	fd = open("/dev/zero", O_RDONLY);
+	if(fd < 0){
+		perror("Can not open dev zero:");
+		return NULL;
+	}
+	do{
+		addr = mmap(addr, (*size)+hugepage_sz, PROT_READ, MAP_PRIVATE, fd, 0);
+		if(addr == MAP_FAILED)
+			*size -= hugepage_sz;
+	}while(addr == MAP_FAILED && *size > 0);
+	
+	if(addr == MAP_FAILED){
+		close(fd);
+		return NULL;
+	}
+	munmap(addr, (*size)+hugepage_sz);
+	close(fd);
+
+	aligned_addr = (long)addr;
+	addr = (void *)ALIGN_ADDR(aligned_addr, hugepage_sz);
+
+	return addr;
+}
 
 //map virtaddr to physaddr
 uint64_t virt_to_phys(void * addr)
@@ -136,12 +168,14 @@ static int cmp_physaddr(const void *p1, const void *p2)
 //map hugepage file into userspace
 uint32_t map_hugepages(hugepage_file *hpf, uint32_t number, uint64_t hugepage_sz)
 {
-	uint32_t i;
+	uint32_t i, j, conti_pages;
 	int fd;
 	void * virtaddr;
 	void * vma_addr = NULL;
 	int memseg_num=0;
-	
+	size_t vma_len = 0;	
+
+//first map	
 	for(i=0; i<number; i++){
 		hpf[i].file_id = i;
 		memset(hpf[i].file_path, 0, sizeof(hpf[i].file_path));
@@ -162,22 +196,45 @@ uint32_t map_hugepages(hugepage_file *hpf, uint32_t number, uint64_t hugepage_sz
 		if(hpf[i].physaddr == 0){
 			printf("Fail to get physaddr of %u page...\n", i);
 			return i;
-		}	
+		}
+		close(fd);	
 	}
+
+//sort by physaddr on increased order
 	qsort(hpf, number, sizeof(hugepage_file), cmp_physaddr);
+
+//second map, try to get contiguous virtaddr
 	for(i=0; i<number; i++){
-		if(i == 0){
-			memseg_num += 1;
-			continue;
+		//get the length of a new pages area that have contiguous physaddr
+		//then mmap from start addr of this area
+		if(vma_len==0){
+			for(j=i+1; j<number; j++){
+				if((hpf[j].physaddr-hpf[j-1].physaddr) != hugepage_sz)
+					break;
+			}
+			conti_pages = j-i;
+			vma_len = conti_pages * hugepage_sz;
+			//try get virt addr as long lengh as phyaddr
+			vma_addr = try_virt_area(&vma_len, hugepage_sz);
+			if(vma_addr == NULL)
+				vma_len = hugepage_sz;
 		}
-		if((hpf[i].physaddr-hpf[i-1].physaddr) != hugepage_sz){
-			memseg_num += 1;
+		fd = open(hpf[i].file_path, O_CREAT | O_RDWR, 0600);
+		if(fd<0){
+			perror("hugepage file open error:");
+			return i;
 		}
-		else if((hpf[i].addr-hpf[i-1].addr) != hugepage_sz){
-			memseg_num += 1;
+		virtaddr = mmap(vma_addr, hugepage_sz, PROT_READ|PROT_WRITE, MAP_SHARED | MAP_POPULATE, fd, 0);	
+		if(virtaddr == MAP_FAILED){
+			perror("Map hugepage file error:");
+			return i;
 		}
-	}	
-	printf("%d memseg in total...\n", memseg_num);
+		
+		close(fd);
+		hpf[i].addr = virtaddr;
+	    vma_len -= hugepage_sz;
+		vma_addr = (char *)vma_addr + hugepage_sz;	
+	}
 
 	return i;
 }

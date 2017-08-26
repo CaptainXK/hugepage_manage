@@ -9,7 +9,6 @@
 
 //#define MAX_LENGTH 10*1024*1024 //10MB
 //#define TEST_HUGEPAGE_PATH "/mnt/hugepages/mem0"
-#define HUGEPAGE_DIR "/mnt/hugepages"
 
 int main(int argc, char** argv){
 	int fd, fd_zero;
@@ -20,6 +19,9 @@ int main(int argc, char** argv){
 	uint32_t num_pages=0;
 	hugepage_file *tmp_hp;	
 
+	//clean unused hugepage files
+	clean_hugepages(HUGEPAGE_DIR);
+	
 	//get hugepage size in current system	
 	hugepgsz = get_cur_hugepgsz();
 	if(hugepgsz <= 0){
@@ -34,7 +36,6 @@ int main(int argc, char** argv){
 		printf("No hugepages available...\n");
 		return 0;
 	}
-	clean_hugepages(HUGEPAGE_DIR);
 	
 	tmp_hp = malloc(num_pages * sizeof(hugepage_file));
 	if(tmp_hp == NULL)
