@@ -5,9 +5,79 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <stdbool.h>
 
 uint64_t virt_to_phys(void * addr);
 void * try_virt_area(size_t *size, size_t hugepage_sz);
+int find_numasocket(hugepage_file *hpf, uint32_t number);
+
+//find the the socket id of hugepage files
+int find_numasocket(hugepage_file *hpf, uint32_t number)
+{
+	int socket_id;
+	char *end, *nodestr;
+	unsigned int i=0, hp_count=0;
+	uint64_t virt_addr=0;
+	char buf[BUFSIZ];
+	FILE *f;
+	
+	f = fopen("/proc/self/numa_maps", "r");
+	if(f == NULL){
+		perror("Unable to open numa_maps file...:");
+		return 0;
+	}
+
+	while(fgets(buf,sizeof(buf),f) != NULL){
+		if(strstr(buf,"huge") == NULL && strstr(buf, "/mnt/hugepages/xk_map") ==NULL)
+			continue;
+		
+		virt_addr = strtoull(buf, &end, 16);
+		if(virt_addr == 0 || buf == end){
+			printf("Can not find virtaddr...\n");
+			goto ERROR;
+		}
+
+		//find string like " N0=1", 0 is numa node(socket) id, 1 is pages number
+		nodestr = strstr(buf, " N");
+		if(nodestr == NULL){
+			printf("Can not find node information...\n");
+			goto ERROR;
+		}
+		
+		nodestr += 2;
+		end = strstr(nodestr, "=");
+		if(end == NULL){
+			printf("Can not find node id...\n");
+			goto ERROR;
+		}
+		end[0]='\0';
+		end = NULL;
+
+		socket_id = strtoul(nodestr, &end, 0);
+		if( (nodestr[0]=='\0') || (end == NULL) || (*end != '\0')){
+			printf("Can not find node id...\n");
+			goto ERROR;
+		}
+
+
+		//find corresponding hugepage file and set value
+		for(i=0; i<number; i++){
+			if(hpf[i].addr == (void *)(unsigned long)virt_addr){
+				hpf[i].socket_id = socket_id;
+				hp_count++;
+			}
+		}
+	}
+	if(hp_count < number){
+		goto ERROR;
+	}
+	fclose(f);
+	return hp_count;
+
+ERROR:
+	fclose(f);
+	return 0;	
+}
 
 //find a virt addr space with length of given size
 void * try_virt_area(size_t *size, size_t hugepage_sz)
@@ -34,6 +104,12 @@ void * try_virt_area(size_t *size, size_t hugepage_sz)
 	munmap(addr, (*size)+hugepage_sz);
 	close(fd);
 
+	//align to upper boundary
+	//page layout :|---page_1---|---page_2---|---....---|---page_n---|
+	//before align:    |addr-------|
+	//after align :             |addr--------|
+	//always move addr to next page start point
+	//that's why the length of area we try to mmap is (*size)+hugepage_sz, 
 	aligned_addr = (long)addr;
 	addr = (void *)ALIGN_ADDR(aligned_addr, hugepage_sz);
 
@@ -178,6 +254,7 @@ uint32_t map_hugepages(hugepage_file *hpf, uint32_t number, uint64_t hugepage_sz
 //first map	
 	for(i=0; i<number; i++){
 		hpf[i].file_id = i;
+		hpf[i].pagesize = hugepage_sz;
 		memset(hpf[i].file_path, 0, sizeof(hpf[i].file_path));
 		sprintf(hpf[i].file_path, "/mnt/hugepages/xk_map%u", hpf[i].file_id);
 		hpf[i].file_path[sizeof(hpf[i].file_path)-1] = '\0';
@@ -202,6 +279,12 @@ uint32_t map_hugepages(hugepage_file *hpf, uint32_t number, uint64_t hugepage_sz
 
 //sort by physaddr on increased order
 	qsort(hpf, number, sizeof(hugepage_file), cmp_physaddr);
+
+//find numa_socket
+	if(find_numasocket(hpf, number) == 0){
+		printf("Numa socket id set error...\n");
+		return 0;
+	}
 
 //second map, try to get contiguous virtaddr
 	for(i=0; i<number; i++){
@@ -231,6 +314,8 @@ uint32_t map_hugepages(hugepage_file *hpf, uint32_t number, uint64_t hugepage_sz
 		}
 		
 		close(fd);
+		munmap(hpf[i].addr, hugepage_sz);
+		hpf[i].addr = NULL;
 		hpf[i].addr = virtaddr;
 	    vma_len -= hugepage_sz;
 		vma_addr = (char *)vma_addr + hugepage_sz;	
@@ -252,13 +337,14 @@ int clean_hugepages(const char * huge_dir){
 		perror("Unable to open hugepage dir:");
 		return 1;
 	}
+	dir_fd = dirfd(dir);
 	
 	dirent = readdir(dir);
 	if(!dirent){
 		perror("Unable to read hugepage dir:");
 		return 1;
 	}	
-	while(!dirent){
+	while(dirent != NULL){
 		if( fnmatch(filter, dirent->d_name, 0) > 0){
 			dirent = readdir(dir);
 			continue;
@@ -285,3 +371,71 @@ int clean_hugepages(const char * huge_dir){
 	}
 	return 0;
 }
+
+//unmap all hugepages file
+uint32_t munmap_all_hugepages(hugepage_file *hpf, uint32_t page_number)
+{
+	uint32_t i=0;
+	for(i=0; i<page_number; i++){
+		if(hpf[i].addr != NULL && hpf[i].pagesize > 0)
+			munmap(hpf[i].addr, hpf[i].pagesize);
+	}
+}
+
+//merge pages to segments
+uint32_t pages_to_memsegs(hugepage_file *hpf, uint32_t page_number)
+{
+	uint32_t i=0, j=0;
+	bool is_new_memseg;
+	
+	for(i=0; i<page_number; i++){
+		is_new_memseg = 0;
+		if(i==0)//first pages start a new memseg
+			is_new_memseg = 1;
+		else if(hpf[i].socket_id != hpf[i-1].socket_id)//different socket id
+			is_new_memseg = 1;
+		else if(hpf[i].pagesize != hpf[i-1].pagesize)//different page size
+			is_new_memseg = 1;
+		else if( (hpf[i].physaddr - hpf[i-1].physaddr) != hpf[i].pagesize)//uncontiguous physaddr
+			is_new_memseg = 1;
+		else if( ((unsigned long)hpf[i].addr - (unsigned long)hpf[i-1].addr) != hpf[i].pagesize)//uncontiguous virt addr
+			is_new_memseg = 1;
+		
+		if(is_new_memseg){
+			global_memseg[j].phys_addr = hpf[i].physaddr;
+			global_memseg[j].addr = hpf[i].addr;
+			global_memseg[j].len = hpf[i].pagesize;
+			global_memseg[j].socket_id = hpf[i].socket_id;
+			global_memseg[j].hugepage_sz = hpf[i].pagesize; 
+			hpf[i].memseg_id = j;
+			j ++;
+		}
+		else{
+			global_memseg[j].len += hpf[i].pagesize;
+			hpf[i].memseg_id = j;
+		}
+	}
+	if(i < page_number){
+		printf("Can not merge all hugepages...\n");
+		munmap_all_hugepages(hpf, page_number);
+	}
+	nb_memsegs = j;
+	return i;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

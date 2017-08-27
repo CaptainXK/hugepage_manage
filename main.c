@@ -51,6 +51,10 @@ int main(int argc, char** argv){
 	else{
 		printf("hugepage files init done...\n");
 	}
+	ret = pages_to_memsegs(tmp_hp, num_pages);
+	if(ret == num_pages){
+		printf("%u hugepage memsegs init done...\n", nb_memsegs);
+	}
 /*
 	for(i=0; i<num_pages; i++)
 	{
