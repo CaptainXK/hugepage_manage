@@ -104,10 +104,6 @@ void * try_virt_area(size_t *size, size_t hugepage_sz)
 	munmap(addr, (*size)+hugepage_sz);
 	close(fd);
 
-	//align to upper boundary
-	//page layout :|---page_1---|---page_2---|---....---|---page_n---|
-	//before align:    |addr-------|
-	//after align :             |addr--------|
 	//always move addr to next page start point
 	//that's why the length of area we try to mmap is (*size)+hugepage_sz, 
 	aligned_addr = (long)addr;
@@ -423,19 +419,79 @@ uint32_t pages_to_memsegs(hugepage_file *hpf, uint32_t page_number)
 	return i;
 }
 
+//init a elem
+void malloc_elem_init(hugepage_malloc_elem *elem, hugepage_malloc_heap *heap, const hugepage_memseg *ms, size_t size)
+{
+	elem->heap = heap;
+	elem->ms = ms;
+	elem->prev = NULL;
+	memset(&elem->free_list, 0, sizeof(elem->free_list));
+	elem->size = size;
+	elem->state = ELEM_FREE;		
+}
+
+//create end elem 
+void malloc_elem_mkend(hugepage_malloc_elem *elem, hugepage_malloc_elem *prev)
+{
+	malloc(elem, prev->heap, prev->ms, 0);
+	elem->prev = prev;
+	elem->prev = ELEM_BUSY;
+}
+
+//find suitable free list id
+size_t find_free_list_idx(hugepage_malloc_elem *elem)
+{
+	#define MALLOC_MINSIZE_LOG2 8
+	#define MALLOC_LOG2_INCREMENT 2
+	
+	size_t log2;
+	size_t index;
+	
+	if(size <= (1UL << MALLOC_MINSIZE_LOG2))
+		return 0;
+
+	//find the smallest 2 ** (log2) >= size
+	log2 = sizeof(size) * 8 - __builtin_clzl(size-1);
+
+	index = (log2 - MALLOC_MINSIZE_LOG2 + MALLOC_LOG2_INCREMENT - 1) / MALLOC_LOG2_INCREMENT;
+
+	return index <= MAX_FREE_LIST_NB - 1 ? index: MAX_FREE_LIST_NB - 1; 	
+}
+
+//insert elem into free list
+void malloc_elem_insert_freelist(hugepage_malloc_elem *elem)
+{
+	size_t idx;
+
+    idx = find_free_list_idx(elem->size);	
+	elem->state = ELEM_FREE;
+	LIST_INSERT_HEAD(&elem->heap->free_head[idx], elem, free_list);	
+}
+
+//add a memseg to the heap of specified socket_id
+uint32_t memsegs_to_heaps(hugepage_memseg *ms, uint32_t socket_id)
+{
+	hugepage_malloc_elem start_elem = (hugepage_malloc_elem *)ms->addr;
+	struct malloc_elem *end_elem = (void *)((uintptr_t)start + (ms->len - sizeof(hugepage_malloc_elem))); 	
+ 	end_elem = ALIGN_PTR_FLOOR(end_elem, ALIGN_SIZE);
+	const size_t elem_size = (uintptr_t)end_elem - (uintptr_t)start_elem;	
+	
+	malloc_elem_init(start_elem, &global_malloc_heap[socket_id], ms, elem_size);
+	malloc_elem_mkend(end_elem, start_elem);
+	malloc_elem_insert_freelist(start_elem);				
+}
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+//global malloc hugepage heap initialization
+uint32_t global_heap_init()
+{
+	uint32_t ms_cnt;
+	hugepage_memseg *ms;
+	
+	for(ms = &global_memseg[0], ms_cnt = 0; 
+			(ms_cnt < nb_memsegs) && ms->len > 0;
+				ms++, ms_cnt++)
+	{
+		//add a memseg into heap	
+	}
+}
