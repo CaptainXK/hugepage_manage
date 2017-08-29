@@ -7,6 +7,7 @@
 #include <linux/limits.h>//PATH_MAX
 #include "hugepage_memory.h"
 #include "hugepage_malloc.h"
+#include "runtime_info.h"
 
 //#define MAX_LENGTH 10*1024*1024 //10MB
 //#define TEST_HUGEPAGE_PATH "/mnt/hugepages/mem0"
@@ -18,7 +19,18 @@ int main(int argc, char** argv){
 	uint64_t hugepgsz;
 	uint32_t ret, i;
 	uint32_t num_pages=0;
-	hugepage_file *tmp_hp;	
+	hugepage_file *tmp_hp;
+
+//test read cpuid coreid socketid	
+	int cpu_id;
+	uint32_t core_id;
+	int socket_id;
+	cpu_id = get_cpu_id();
+	core_id = get_core_id(cpu_id);
+	socket_id = get_socket_id(cpu_id);
+	printf("CPU_%d---CORE_%u---SOCKET_%d\n",cpu_id, core_id, socket_id);
+	return 0; 
+//end test	
 
 	//clean unused hugepage files
 	clean_hugepages(HUGEPAGE_DIR);

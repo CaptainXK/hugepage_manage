@@ -1,6 +1,6 @@
 .PHONY:test,clean
 
-test.app:main.o sysfs_ops.o hugepage_memory.o hugepage_malloc.o
+test.app:main.o sysfs_ops.o hugepage_memory.o hugepage_malloc.o runtime_info.o
 	@gcc *.o -o test.app
 test:test.app
 	@$(EXEC) ./test.app
@@ -12,6 +12,8 @@ hugepage_memory.o:hugepage_memory.c
 	@gcc -c hugepage_memory.c -g3
 hugepage_malloc.o:hugepage_malloc.c
 	@gcc -c hugepage_malloc.c -g3
+runtime_info.o:runtime_info.c
+	@gcc -c runtime_info.c -g3
 
 clean:
 	@rm *.o test.app
