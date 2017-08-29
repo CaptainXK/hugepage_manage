@@ -6,6 +6,7 @@
 #include <string.h>
 #include <linux/limits.h>//PATH_MAX
 #include "hugepage_memory.h"
+#include "hugepage_malloc.h"
 
 //#define MAX_LENGTH 10*1024*1024 //10MB
 //#define TEST_HUGEPAGE_PATH "/mnt/hugepages/mem0"
@@ -55,6 +56,13 @@ int main(int argc, char** argv){
 	if(ret == num_pages){
 		printf("%u hugepage memsegs init done...\n", nb_memsegs);
 	}
+	ret = global_heap_init();
+	if(ret == 0){
+		printf("Malloc heap init done...\n");
+	}
+	else
+		printf("Malloc heap init error...\n");
+	show_heaps_state();
 /*
 	for(i=0; i<num_pages; i++)
 	{

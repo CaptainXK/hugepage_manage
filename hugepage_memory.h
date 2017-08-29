@@ -1,3 +1,5 @@
+#pragma once
+
 #include <stdint.h>
 #include <linux/limits.h>
 #include "sysfs_ops.h"
@@ -29,7 +31,6 @@
 #define ALIGN_PTR_FLOOR(ptr, align) \
 	((typeof(ptr))ALIGN_FLOOR((uintptr_t)ptr, align))
 
-
 struct hugepage_file{
 	void * addr;
 	uint64_t physaddr;
@@ -51,44 +52,18 @@ struct hugepage_memseg{
 	int socket_id;
 }__attribute__((__packed__));
 
-struct hugepage_malloc_heap;//dummy definition of hugepage_heap struct to use it in hugepage_malloc_elem
-
-enum elem_state{
-	ELEM_FREE = 0,
-	ELEM_BUSY,
-	ELEM_EMPTY
-};
-
-struct hugepage_malloc_elem{
-	struct hugepage_malloc_heap *heap;
-	struct hugepage_malloc_elem *volatile prev;
-	LIST_ENTRY(hugepage_malloc_elem) free_list;
-	const struct hugepage_memseg *ms;
-	size_t size; 
-	enum elem_state state;
-};
-
-//typedef struct hugepage_malloc_elem hugepage_malloc_elem;
-
-struct hugepage_malloc_heap{
-	LIST_HEAD(	,hugepage_malloc_elem) free_head[MAX_FREE_LIST_NB];
-};
-
 typedef struct hugepage_file hugepage_file;
 typedef struct hugepage_memseg hugepage_memseg;
-typedef struct hugepage_malloc_heap hugepage_malloc_heap;
 
 //functions
 uint64_t get_cur_hugepgsz();
 uint32_t get_num_hugepages();
 uint32_t map_hugepages(hugepage_file *hpf, uint32_t number, uint64_t hugepage_sz);
 int clean_hugepages(const char * huge_dir);
-uint32_t pages_to_memsegs(hugepage_file *hpf, uint32_t page_number);
 uint32_t munmap_all_hugepages(hugepage_file *hpf, uint32_t page_number);
-uint32_t global_heap_init();
+uint32_t pages_to_memsegs(hugepage_file *hpf, uint32_t page_number);
 
 //global var
-static char hugepage_size_str[256]="";
-static hugepage_memseg global_memseg[MAX_MEMSEG];
-uint32_t nb_memsegs;
-hugepage_malloc_heap global_malloc_heap[MAX_SOCKET_NB];
+extern char hugepage_size_str[256];
+extern hugepage_memseg global_memseg[MAX_MEMSEG];
+extern uint32_t nb_memsegs;
