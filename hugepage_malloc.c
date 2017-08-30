@@ -44,7 +44,7 @@ size_t find_free_list_idx(size_t size)
 		return 0;
 	
 	//find the smallest 2 ^ (log2) >= size
-	//__builtin_clzl(long var) : In binary bits array of var ,number of 0 before the first "1" from left to right.
+	//__builtin_clzl(long var) : In binary bits array of var ,return the number of 0 before the first "1" from left to right.
 	//"log2" is the largest number that is power of 2 and smaller than "size"
 	//for example, when size is 4096
 	//the largest number, that is smaller than 4097 and is power of 2, is 4096
@@ -80,7 +80,8 @@ uint32_t memsegs_to_heaps(hugepage_memseg *ms)
 {
 	int socket_id = ms->socket_id;
 	hugepage_malloc_elem *start_elem = (hugepage_malloc_elem *)ms->addr;
-	hugepage_malloc_elem *end_elem = (void *)((uintptr_t)start_elem + (ms->len - sizeof(hugepage_malloc_elem))); 	
+	hugepage_malloc_elem *end_elem = (void *)((uintptr_t)start_elem 
+									+ (ms->len - sizeof(hugepage_malloc_elem))); 	
  	end_elem = ALIGN_PTR_FLOOR(end_elem, ALIGN_SIZE);
 	const size_t elem_size = (uintptr_t)end_elem - (uintptr_t)start_elem;	
 	
@@ -97,7 +98,7 @@ uint32_t global_heap_init()
 	uint32_t ms_cnt;
 	hugepage_memseg *ms;
 	
-	memset(global_malloc_heap, 0, sizeof(hugepage_malloc_heap)*MAX_SOCKET_NB);
+	memset(global_malloc_heap, 0, sizeof(hugepage_malloc_heap) * MAX_SOCKET_NB);
 
 	for(ms = &global_memseg[0], ms_cnt = 0; 
 			(ms_cnt < nb_memsegs) && ms->len > 0;
@@ -123,3 +124,40 @@ void show_heaps_state()
 	}
 	return;
 }
+
+//
+
+//find suitable free elem
+//if fail, search in bigger free_list untill fail in the end
+hugepage_malloc_elem* find_suitable_elem(hugepage_malloc_heap *heap, size_t size, 
+									unsigned flags, size_t align, size_t bound)
+{
+	
+}
+
+//splite new_elem out from elem
+split_elem(hugepage_malloc_elem *elem, hugepage_malloc_elem *new_elem)
+{
+	
+}
+
+//malloc on one elem
+hugepage_malloc_elem* malloc_elem(hugepage_malloc_elem *elem, size_t size, 
+									unsigned align)
+{
+	
+}
+
+//malloc on specified heap
+void * malloc_on_heap(hugepage_malloc_heap *heap, size_t size, unsigned flags, 
+		size_t align);
+{
+	
+}
+
+//malloc on specified socket
+void * malloc_on_socket(size_t size, unsigned align, int socket_id)
+{
+	
+}
+

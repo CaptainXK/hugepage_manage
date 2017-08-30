@@ -31,6 +31,7 @@ typedef struct hugepage_malloc_heap hugepage_malloc_heap;
 //functions
 uint32_t global_heap_init();
 void show_heaps_state();
+void * malloc_on_socket(size_t size, unsigned align, int socket_id);
 
 //global vars
 extern hugepage_malloc_heap global_malloc_heap[MAX_SOCKET_NB];
