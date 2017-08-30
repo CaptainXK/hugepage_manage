@@ -32,7 +32,7 @@ int main(int argc, char** argv){
 	return 0; 
 //end test	
 
-	//clean unused hugepage files
+	//clean unused exsiting hugepage files
 	clean_hugepages(HUGEPAGE_DIR);
 	
 	//get hugepage size in current system	
@@ -56,6 +56,7 @@ int main(int argc, char** argv){
 		perror("Malloc error");
 		return 0;
 	}
+	//map all avaliable hugepages
 	ret = map_hugepages(tmp_hp, num_pages, hugepgsz);
 	if(ret != num_pages){
 		printf("hugepage files init error...\n");

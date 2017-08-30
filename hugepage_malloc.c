@@ -95,10 +95,15 @@ uint32_t memsegs_to_heaps(hugepage_memseg *ms)
 //global malloc hugepage heap initialization
 uint32_t global_heap_init()
 {
-	uint32_t ms_cnt;
+	uint32_t ms_cnt, i;
 	hugepage_memseg *ms;
 	
 	memset(global_malloc_heap, 0, sizeof(hugepage_malloc_heap) * MAX_SOCKET_NB);
+	
+	//init heap lock
+	for(i=0; i<MAX_SOCKET_NB; i++){
+		spin_lock_init(&global_malloc_heap[i].heap_lock);
+	}	
 
 	for(ms = &global_memseg[0], ms_cnt = 0; 
 			(ms_cnt < nb_memsegs) && ms->len > 0;

@@ -1,5 +1,6 @@
 #pragma once
 #include "hugepage_memory.h"
+#include <linux/spinlock.h>
 
 struct hugepage_malloc_heap;//dummy definition of hugepage_heap struct to use it in hugepage_malloc_elem
 
@@ -24,6 +25,7 @@ struct hugepage_malloc_heap{
 	LIST_HEAD(	,hugepage_malloc_elem) free_head[MAX_FREE_LIST_NB];
 	size_t total_size;
 	size_t using_size;
+	spinlock_t heap_lock;
 }__attribute__((__aligned__(64)));
 
 typedef struct hugepage_malloc_heap hugepage_malloc_heap;
