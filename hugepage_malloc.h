@@ -1,4 +1,5 @@
 #pragma once
+#include <sys/queue.h>//LIST_***
 #include "hugepage_memory.h"
 #include <linux/spinlock.h>
 
@@ -25,6 +26,7 @@ struct hugepage_malloc_heap{
 	LIST_HEAD(	,hugepage_malloc_elem) free_head[MAX_FREE_LIST_NB];
 	size_t total_size;
 	size_t using_size;
+	unsigned alloc_counter;
 	spinlock_t heap_lock;
 }__attribute__((__aligned__(64)));
 
@@ -33,8 +35,7 @@ typedef struct hugepage_malloc_heap hugepage_malloc_heap;
 //functions
 uint32_t global_heap_init();
 void show_heaps_state();
-void * malloc_on_socket(size_t size, unsigned align, int socket_id);
+void * memzone_alloc(size_t size);
 
 //global vars
 extern hugepage_malloc_heap global_malloc_heap[MAX_SOCKET_NB];
-

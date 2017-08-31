@@ -1,5 +1,4 @@
 #pragma once
-
 #include <stdint.h>
 #include <linux/limits.h>
 #include "sysfs_ops.h"
@@ -7,29 +6,12 @@
 #include <dirent.h>
 #include <fnmatch.h>//fnmatch()
 #include <sys/file.h>//flock()
-#include <sys/queue.h>//LIST_***
 
 #define HUGEPAGE_DIR "/mnt/hugepages"
 #define MAX_MEMSEG 256
 #define MAX_SOCKET_NB 8
 #define MAX_FREE_LIST_NB 13
 #define ALIGN_SIZE 64
-
-//align to upper boundary
-//page layout :|---page_1---|---page_2---|---....---|---page_n---|
-//before align:    |addr-------|
-//after align :             |addr--------|
-#define ALIGN_ADDR(addr,size) ((addr + (size-1)) & (~(size-1)))
-
-//align to down boundart
-//align       :|---align---|---align---|...|---align---|
-//before align:		|----val----|
-//after align :|----val----|
-#define ALIGN_FLOOR(val, align) \
-	(typeof(val))( (val) & (~(typeof(val))((align) - 1)) )
-
-#define ALIGN_PTR_FLOOR(ptr, align) \
-	((typeof(ptr))ALIGN_FLOOR((uintptr_t)ptr, align))
 
 struct hugepage_file{
 	void * addr;

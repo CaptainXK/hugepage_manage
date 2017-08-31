@@ -5,6 +5,10 @@
 #include <linux/limits.h>
 #include <stdio.h>
 
+int socket_id = -1;
+int core_id = -1;
+int cpu_id = -1;
+
 int get_cpu_id()
 {
 	int i,cpu_nb;
@@ -27,7 +31,7 @@ int get_cpu_id()
 	return -1;
 }
 
-uint32_t get_core_id(int cpu_id)
+int get_core_id(int cpu_id)
 {	
 	char path[PATH_MAX];
 	unsigned long val;
@@ -44,7 +48,7 @@ uint32_t get_core_id(int cpu_id)
 		printf("Read core_id error in file reading...\n");		
 	}
 	
-	return (uint32_t)val;
+	return (int)val;
 }
 
 int get_socket_id(int cpu_id)
@@ -59,4 +63,44 @@ int get_socket_id(int cpu_id)
 		}
 	}
 	return -1;
+}
+
+int get_runtime_info()
+{
+	int ret;
+	
+	ret = get_cpu_id();
+	if(ret >= 0)
+		cpu_id = ret;
+	else
+		return -1;
+	
+	ret = get_core_id(cpu_id);
+	if(ret >= 0)
+		core_id = ret;
+	else
+		return -1;
+	
+	ret = get_socket_id(cpu_id);
+	if(ret >= 0)
+		socket_id = ret;
+	else
+		return -1;	
+	
+	return 0;
+}
+
+int get_cur_cpu_id()
+{
+	return cpu_id;
+}
+
+int get_cur_core_id(int cpu_id);
+{
+	return core_id;
+}
+
+int get_cur_socket_id(int cpu_id);
+{
+	return socket_id;
 }

@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include "hugepage_malloc.h"
 #include "string.h"
+#include "common.h"
+#include "runtime_info.h"
 
 hugepage_malloc_heap global_malloc_heap[MAX_SOCKET_NB];
 
@@ -130,39 +132,146 @@ void show_heaps_state()
 	return;
 }
 
-//
-
-//find suitable free elem
-//if fail, search in bigger free_list untill fail in the end
-hugepage_malloc_elem* find_suitable_elem(hugepage_malloc_heap *heap, size_t size, 
-									unsigned flags, size_t align, size_t bound)
+//calculate new elem start addr
+void * get_new_malloc_elem_start(hugepage_malloc_elem, size_t size, unsigned align)
 {
-	
+	uintptr_t end_pt = (uintptr_t)elem + elem->size;
+	uintptr_t new_data_start = ALIGN_FLOOR((end_pt - size), align);
+	uintptr_t new_elem_start;
+
+	//malloc_elem layout:
+	//|-------------------------------elem-------------------------------|
+	//|<--struct hugepage_malloc_elem-->|<-------------data------------->|
+	new_elem_start = new_data_start - sizeof(hugepage_malloc_elem);
+	if(new_elem_start < (uintptr_t)elem)
+		return NULL;
+	return new_elem_start;
 }
 
 //splite new_elem out from elem
-split_elem(hugepage_malloc_elem *elem, hugepage_malloc_elem *new_elem)
+void* split_elem(hugepage_malloc_elem *elem, hugepage_malloc_elem *new_elem)
 {
 	
 }
 
+//checkt if elem fit given size
+int elem_fit_size(hugepage_malloc_elem *elem, size_t size, size_t align)
+{
+	return get_new_malloc_elem_start(elem, size, align) != NULL;	
+}
+
+//find suitable free elem
+hugepage_malloc_elem* find_suitable_elem(hugepage_malloc_heap *heap, size_t size, 
+									 size_t align)
+{
+	size_t idx;
+	hugepage_malloc_elem *elem=NULL, tmp_elem=NULL;
+
+	//if fail try  free list of bigger elem	
+	for(idx = find_free_list_idx(size);
+			idx<MAX_FREE_LIST_NB; idx++)
+	{
+		for(elem = LIST_FIRST(heap->free_head[idx]);//start from first elem of current free list 
+				elem != NULL; elem = LIST_NEXT(elem, free_list))
+		{
+			if(elem_fit_size(elem, size, align) == 1){
+				return elem;
+			}
+			else
+				tmp_elem = elem;
+		}	
+	}
+
+	if( tmp_elem != NULL)
+		return tmp_elem;
+	return NULL;
+}
+
 //malloc on one elem
-hugepage_malloc_elem* malloc_elem(hugepage_malloc_elem *elem, size_t size, 
+hugepage_malloc_elem* malloc_on_elem(hugepage_malloc_elem *elem, size_t size, 
 									unsigned align)
 {
+	hugepage_malloc_elem * new_elem = get_new_malloc_elem_start(elem, size, align);
+	const size_t old_elem_size = (uintptr_t)new_elem - (uintptr_t)elem;
+	const size_t trailer_size = elem->size - old_elem_size - size - sizeof(hugepage_malloc_elem);
+	//elem layout:
+	//|-----------------------------------elem------------------------------------|
+	//|----------------old_elem-------------|-------------new_elem----------------|
+	//|---hugepage_malloc_elem---|---data---|---hugepage_malloc_elem---|---data---|
+	//^elem                                 ^new_elem
+	//                           |<---------------------elem_size---------------->|
+	//|                          |<old_size>|                          |<--size-->|
+
+	if(trailer)
+	
 	
 }
 
 //malloc on specified heap
-void * malloc_on_heap(hugepage_malloc_heap *heap, size_t size, unsigned flags, 
-		size_t align);
+void * malloc_on_heap(hugepage_malloc_heap *heap, size_t size, size_t align);
 {
+	hugepage_malloc_elem *elem = NULL;
 	
+	//align size and align
+	size = ALIGN_SIZE_ROUNDUP(size);
+	align = ALIGN_SIZE_ROUNDUP(align);
+
+	//try entry critical area and lock
+	spin_lock(heap->heap_lock);
+	
+	elem = find_suitable_elem(heap, size, align);
+	if(elem != NULL){//if find a suitable elem in current heap, try alloc from it
+		elem = malloc_on_elem(elem, size, align);
+		heap->alloc_counter += 1;
+	}
+		
+	//go out critical area and unlock
+	spin_unlock(heap->heap_lock);
+
+	if(elem != NULL)
+		return elem[1];//elem[0]  storing a struct hugapage_malloc_elem	as a header
+	else
+		return NULL;
 }
 
 //malloc on specified socket
 void * malloc_on_socket(size_t size, unsigned align, int socket_id)
 {
+	int socket, i;
+	void *ret;
+
+	//check if size is not 0 and align is power of 2
+	if(size == 0 || (align <=0 && !is_power_of_two(align))
+		return NULL;
+
+	ret = malloc_on_heap(global_malloc_heap[socket_id], size, align);
 	
+	if(ret != NULL)
+		return ret;
+		
+	//try other socket's heap
+	for(i=0 ; i < MAX_SOCKET_NB; i++ )
+	{
+		//tried this socket already before
+		if( i == socket_id )
+			continue;	
+		ret = malloc_on_heap(global_malloc_heap[i], size, align);
+		if( ret != NULL)
+			return ret;
+	}	
+
+	return NULL;
 }
 
+//malloc API
+void *memzone_malloc(size_t size, unsigned align)
+{
+	int socket_id = get_cur_socket_id();
+	
+	//check if socket_id is valid
+	if(socket_id < 0 || socket_id >= MAX_SOCKET_NB)
+		return NULL;
+	
+	return malloc_on_socket(size, align, socket_id);
+		
+}
