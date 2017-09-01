@@ -95,12 +95,12 @@ int get_cur_cpu_id()
 	return cpu_id;
 }
 
-int get_cur_core_id(int cpu_id);
+int get_cur_core_id()
 {
 	return core_id;
 }
 
-int get_cur_socket_id(int cpu_id);
+int get_cur_socket_id()
 {
 	return socket_id;
 }

@@ -1,14 +1,17 @@
 #pragma once
 #include <sys/queue.h>//LIST_***
 #include "hugepage_memory.h"
-#include <linux/spinlock.h>
+#include "cus_spinlock.h"
+
+#define ELEM_HEADER_SIZE ( sizeof(hugepage_malloc_elem) )
+#define MIN_ELEM_SIZE ( MIN_DATA_SIZE + ELEM_HEADER_SIZE )
 
 struct hugepage_malloc_heap;//dummy definition of hugepage_heap struct to use it in hugepage_malloc_elem
 
 enum elem_state{
 	ELEM_FREE = 0,
 	ELEM_BUSY,
-	ELEM_EMPTY
+	ELEM_PAD
 };
 
 struct hugepage_malloc_elem{
@@ -16,7 +19,8 @@ struct hugepage_malloc_elem{
 	struct hugepage_malloc_elem *volatile prev;
 	LIST_ENTRY(hugepage_malloc_elem) free_list;
 	const struct hugepage_memseg *ms;
-	size_t size; 
+	size_t size;
+	uint32_t pad; 
 	enum elem_state state;
 }__attribute__((__aligned__(64)));
 
@@ -27,15 +31,16 @@ struct hugepage_malloc_heap{
 	size_t total_size;
 	size_t using_size;
 	unsigned alloc_counter;
-	spinlock_t heap_lock;
+	cus_spinlock_t heap_lock;
 }__attribute__((__aligned__(64)));
 
 typedef struct hugepage_malloc_heap hugepage_malloc_heap;
 
-//functions
+//API
 uint32_t global_heap_init();
 void show_heaps_state();
-void * memzone_alloc(size_t size);
+void * mem_alloc(size_t size);
+void mem_free(void * data);
 
 //global vars
 extern hugepage_malloc_heap global_malloc_heap[MAX_SOCKET_NB];

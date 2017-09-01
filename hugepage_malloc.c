@@ -83,7 +83,7 @@ uint32_t memsegs_to_heaps(hugepage_memseg *ms)
 	int socket_id = ms->socket_id;
 	hugepage_malloc_elem *start_elem = (hugepage_malloc_elem *)ms->addr;
 	hugepage_malloc_elem *end_elem = (void *)((uintptr_t)start_elem 
-									+ (ms->len - sizeof(hugepage_malloc_elem))); 	
+									+ (ms->len - ELEM_HEADER_SIZE)); 	
  	end_elem = ALIGN_PTR_FLOOR(end_elem, ALIGN_SIZE);
 	const size_t elem_size = (uintptr_t)end_elem - (uintptr_t)start_elem;	
 	
@@ -104,7 +104,7 @@ uint32_t global_heap_init()
 	
 	//init heap lock
 	for(i=0; i<MAX_SOCKET_NB; i++){
-		spin_lock_init(&global_malloc_heap[i].heap_lock);
+		cus_spinlock_init(&global_malloc_heap[i].heap_lock);
 	}	
 
 	for(ms = &global_memseg[0], ms_cnt = 0; 
@@ -133,7 +133,7 @@ void show_heaps_state()
 }
 
 //calculate new elem start addr
-void * get_new_malloc_elem_start(hugepage_malloc_elem, size_t size, unsigned align)
+void * get_new_malloc_elem_start(hugepage_malloc_elem *elem, size_t size, unsigned align)
 {
 	uintptr_t end_pt = (uintptr_t)elem + elem->size;
 	uintptr_t new_data_start = ALIGN_FLOOR((end_pt - size), align);
@@ -142,16 +142,10 @@ void * get_new_malloc_elem_start(hugepage_malloc_elem, size_t size, unsigned ali
 	//malloc_elem layout:
 	//|-------------------------------elem-------------------------------|
 	//|<--struct hugepage_malloc_elem-->|<-------------data------------->|
-	new_elem_start = new_data_start - sizeof(hugepage_malloc_elem);
+	new_elem_start = new_data_start - ELEM_HEADER_SIZE;
 	if(new_elem_start < (uintptr_t)elem)
 		return NULL;
-	return new_elem_start;
-}
-
-//splite new_elem out from elem
-void* split_elem(hugepage_malloc_elem *elem, hugepage_malloc_elem *new_elem)
-{
-	
+	return (void *)new_elem_start;
 }
 
 //checkt if elem fit given size
@@ -165,13 +159,13 @@ hugepage_malloc_elem* find_suitable_elem(hugepage_malloc_heap *heap, size_t size
 									 size_t align)
 {
 	size_t idx;
-	hugepage_malloc_elem *elem=NULL, tmp_elem=NULL;
+	hugepage_malloc_elem *elem=NULL, *tmp_elem=NULL;
 
 	//if fail try  free list of bigger elem	
 	for(idx = find_free_list_idx(size);
 			idx<MAX_FREE_LIST_NB; idx++)
 	{
-		for(elem = LIST_FIRST(heap->free_head[idx]);//start from first elem of current free list 
+		for(elem = LIST_FIRST(&heap->free_head[idx]);//start from first elem of current free list 
 				elem != NULL; elem = LIST_NEXT(elem, free_list))
 		{
 			if(elem_fit_size(elem, size, align) == 1){
@@ -187,28 +181,79 @@ hugepage_malloc_elem* find_suitable_elem(hugepage_malloc_heap *heap, size_t size
 	return NULL;
 }
 
+//splite new_elem out from elem
+void* split_elem(hugepage_malloc_elem *elem, hugepage_malloc_elem *new_elem)
+{
+	hugepage_malloc_elem *next_elem = PTR_ADD(elem, elem->size);  
+	const size_t old_elem_size = (uintptr_t)new_elem - (uintptr_t)elem;
+	const size_t new_elem_size = elem->size - old_elem_size;
+
+	malloc_elem_init(new_elem, elem->heap, elem->ms, new_elem_size);
+	new_elem->prev = elem;
+	if( next_elem != NULL )
+		next_elem->prev = new_elem;
+	elem->size = old_elem_size;
+}
+
+//remove the elem from current freelist
+void malloc_elem_remove(hugepage_malloc_elem *elem)
+{
+	LIST_REMOVE(elem,free_list);	
+}
+
 //malloc on one elem
 hugepage_malloc_elem* malloc_on_elem(hugepage_malloc_elem *elem, size_t size, 
 									unsigned align)
 {
 	hugepage_malloc_elem * new_elem = get_new_malloc_elem_start(elem, size, align);
 	const size_t old_elem_size = (uintptr_t)new_elem - (uintptr_t)elem;
-	const size_t trailer_size = elem->size - old_elem_size - size - sizeof(hugepage_malloc_elem);
+	const size_t trailer_size = elem->size - old_elem_size - size - ELEM_HEADER_SIZE;
+		
+
 	//elem layout:
 	//|-----------------------------------elem------------------------------------|
 	//|----------------old_elem-------------|-------------new_elem----------------|
-	//|---hugepage_malloc_elem---|---data---|---hugepage_malloc_elem---|---data---|
-	//^elem                                 ^new_elem
-	//                           |<---------------------elem_size---------------->|
-	//|                          |<old_size>|                          |<--size-->|
-
-	if(trailer)
+	//|---HEADER---|--------data------------|---HEADER---|---data----|---trailer--|
+	//|<----------------------------------elem_size------------------------------>|
+	//|<--------------old_size------------->|            |<---size-->|
+	//according to the layout
+	//some addr space will be left because of align_floor
+	//if the align value is large enough, the trailer space may be larger than HEADER+MIN_DATA_SIZE(64)
+	//if it is the case, split it and re-insert trailer into free_list
+	if( trailer_size >= MIN_ELEM_SIZE )
+	{
+		struct hugepage_malloc_elem *new_free_elem = PTR_ADD(new_elem, size + ELEM_HEADER_SIZE);
+		
+		split_elem(new_elem, new_free_elem);
+		malloc_elem_insert_freelist(new_free_elem);			
+	}
 	
+	//if old_size is smaller than HEADER_SIZE + MIN_DATA_SIZE, do not split it, just set it state to unusable
+	//and set the new elem's state is pad
+	//when free the new_elem back to free_list, the pad will be use to find the original elem start 
+	//and free the whole elem into free list, that consists of new_elem and old_elem
+	if(old_elem_size < MIN_ELEM_SIZE )
+	{
+		elem->state = ELEM_BUSY;
+		elem->pad = old_elem_size;
+		if(old_elem_size>0){
+			new_elem->pad = elem->pad;
+			new_elem->state = ELEM_PAD;
+			new_elem->size = elem->size - elem->pad;
+		}
+		return new_elem;	 
+	}	
 	
+	//if the old_elem is larger enough, re-insert it into free_list
+	split_elem(elem, new_elem);
+	new_elem->state = ELEM_BUSY;
+	malloc_elem_insert_freelist(elem);
+	
+	return new_elem;			
 }
 
 //malloc on specified heap
-void * malloc_on_heap(hugepage_malloc_heap *heap, size_t size, size_t align);
+void * malloc_on_heap(hugepage_malloc_heap *heap, size_t size, size_t align)
 {
 	hugepage_malloc_elem *elem = NULL;
 	
@@ -217,7 +262,7 @@ void * malloc_on_heap(hugepage_malloc_heap *heap, size_t size, size_t align);
 	align = ALIGN_SIZE_ROUNDUP(align);
 
 	//try entry critical area and lock
-	spin_lock(heap->heap_lock);
+	cus_spinlock_lock(&heap->heap_lock);
 	
 	elem = find_suitable_elem(heap, size, align);
 	if(elem != NULL){//if find a suitable elem in current heap, try alloc from it
@@ -226,10 +271,10 @@ void * malloc_on_heap(hugepage_malloc_heap *heap, size_t size, size_t align);
 	}
 		
 	//go out critical area and unlock
-	spin_unlock(heap->heap_lock);
+	cus_spinlock_unlock(&heap->heap_lock);
 
 	if(elem != NULL)
-		return elem[1];//elem[0]  storing a struct hugapage_malloc_elem	as a header
+		return (void *)(&elem[1]);//elem[0]  storing a struct hugapage_malloc_elem	as a header
 	else
 		return NULL;
 }
@@ -241,10 +286,10 @@ void * malloc_on_socket(size_t size, unsigned align, int socket_id)
 	void *ret;
 
 	//check if size is not 0 and align is power of 2
-	if(size == 0 || (align <=0 && !is_power_of_two(align))
+	if( size == 0 || (align <=0 && !is_power_of_two(align)) )
 		return NULL;
 
-	ret = malloc_on_heap(global_malloc_heap[socket_id], size, align);
+	ret = malloc_on_heap(&global_malloc_heap[socket_id], size, align);
 	
 	if(ret != NULL)
 		return ret;
@@ -255,7 +300,7 @@ void * malloc_on_socket(size_t size, unsigned align, int socket_id)
 		//tried this socket already before
 		if( i == socket_id )
 			continue;	
-		ret = malloc_on_heap(global_malloc_heap[i], size, align);
+		ret = malloc_on_heap(&global_malloc_heap[i], size, align);
 		if( ret != NULL)
 			return ret;
 	}	
@@ -264,7 +309,7 @@ void * malloc_on_socket(size_t size, unsigned align, int socket_id)
 }
 
 //malloc API
-void *memzone_malloc(size_t size, unsigned align)
+void *mem_malloc(size_t size, unsigned align)
 {
 	int socket_id = get_cur_socket_id();
 	
@@ -275,3 +320,74 @@ void *memzone_malloc(size_t size, unsigned align)
 	return malloc_on_socket(size, align, socket_id);
 		
 }
+
+//join two elem together
+//put elem2 following elem1
+void malloc_elem_join(hugepage_malloc_elem *elem1, hugepage_malloc_elem *elem2)
+{
+	hugepage_malloc_elem *next_elem = PTR_ADD(elem2,elem2->size);
+	elem1->size += elem2->size;
+	if(next_elem!=NULL)
+		next_elem->prev = elem1;
+}
+
+//free elem into free list
+//if the next elem or the previous elem is free
+//join them together and re-insert into free_list
+int free_elem(hugepage_malloc_elem *elem)
+{
+	if(elem->state != ELEM_BUSY)
+		return -1;
+	cus_spinlock_lock(&elem->heap->heap_lock);
+	size_t data_sz = elem->size - ELEM_HEADER_SIZE;	
+	uint8_t *ptr = (uint8_t *)&elem[1];
+	hugepage_malloc_elem *next = PTR_ADD(elem, elem->size);
+	
+	//check if next elem is free
+	if(next->state == ELEM_FREE){
+		malloc_elem_remove(next);
+		malloc_elem_join(elem, next);
+		data_sz += next->size;
+	}	
+
+	//check if previous elem is free
+	if(elem->prev != NULL && elem->prev->state == ELEM_FREE){
+		malloc_elem_remove(elem->prev);
+		malloc_elem_join(elem->prev, elem);
+		data_sz += ELEM_HEADER_SIZE;
+		ptr -= ELEM_HEADER_SIZE;
+		elem = elem->prev;	
+	}
+	malloc_elem_insert_freelist(elem);
+
+	//decrease heap's alloc counter
+	elem->heap->alloc_counter -= 1;
+	memset(ptr,0,data_sz);
+	
+	cus_spinlock_unlock(&elem->heap->heap_lock);
+}
+
+//get elem from given data addr
+hugepage_malloc_elem* get_elem_from_data(const void * data)
+{
+	if(data == NULL)
+		return NULL;
+	hugepage_malloc_elem *elem = PTR_SUB(data, ELEM_HEADER_SIZE);
+	if(elem->state == ELEM_PAD)//what pad means decribed in malloc_on_elem()
+		return PTR_SUB(elem, elem->pad);
+	return elem;
+}
+
+//free API
+void mem_free(void *data)
+{
+	if(data == NULL)
+		return;
+	if(free_elem( get_elem_from_data(data) ) != 0)
+	{
+		printf("Free invalid mem error...\n");
+		return;	
+	}	
+}
+
+

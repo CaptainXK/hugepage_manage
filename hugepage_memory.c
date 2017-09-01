@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdbool.h>
+#include "common.h"
 
 //uint64_t virt_to_phys(void * addr);
 //void * try_virt_area(size_t *size, size_t hugepage_sz);

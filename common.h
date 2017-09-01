@@ -1,4 +1,8 @@
+#pragma once
+#include <emmintrin.h>//_mm_pause()
+
 #define ALIGN_SIZE 64
+#define MIN_DATA_SIZE 64
 
 //align to upper boundary
 //page layout :|---page_1---|---page_2---|---....---|---page_n---|
@@ -20,8 +24,21 @@
 #define ALIGN_SIZE_ROUNDUP(size) \
 	(ALIGN_SIZE * ((size + ALIGN_SIZE - 1) / (ALIGN_SIZE))) 
 
+//ptr add
+#define PTR_ADD(ptr,x) ( (void *)( (uintptr_t)(ptr) + (x) ) )
+
+//ptr sub
+#define PTR_SUB(ptr,x) ( (void *)( (uintptr_t)(ptr) - (x) ) )
+
 static inline int
 is_power_of_two(int var)
 {
 	return var && !(var & (var-1));
+}
+
+static inline void
+cus_pause()
+{
+	_mm_pause();
+	return;	
 }
