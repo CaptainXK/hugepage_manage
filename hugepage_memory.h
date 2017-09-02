@@ -44,6 +44,7 @@ uint32_t map_hugepages(hugepage_file *hpf, uint32_t number, uint64_t hugepage_sz
 int clean_hugepages(const char * huge_dir);
 uint32_t munmap_all_hugepages(hugepage_file *hpf, uint32_t page_number);
 uint32_t pages_to_memsegs(hugepage_file *hpf, uint32_t page_number);
+void show_memsegs_state();
 
 //global var
 extern char hugepage_size_str[256];

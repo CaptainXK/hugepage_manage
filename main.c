@@ -71,6 +71,9 @@ int main(int argc, char** argv){
 	if(ret == num_pages){
 		printf("%u hugepage memsegs init done...\n", nb_memsegs);
 	}
+//	//show memsegs state for debug
+//	show_memsegs_state();
+	
 	ret = global_heap_init();
 	if(ret == 0){
 		printf("Malloc heap init done...\n");
@@ -94,11 +97,10 @@ int main(int argc, char** argv){
 	for(i=0; i<TEST_LEN; i++)
 		test_data[i] = 'a'+i;
 	printf("test_data:%s\n",test_data);
-	//after malloc heaps' state
+	
+//	//after malloc heaps' state
 	show_heaps_state();	
-	getchar();
 	mem_free(test_data);
-	test_data = NULL;	
 	printf("Malloc and free test pass...\n");
 	
 	//after free heaps' state
