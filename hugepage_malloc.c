@@ -61,8 +61,8 @@ size_t find_free_list_idx(size_t size)
 	//why "(log2-min_log2)+(increment - 1)/increment"?
 	//for example:
 	//we want to "7/2 = 3.5 = 4", but system will get 3 instead of 4
-	//so we add 7 by "increment-1" to get result we want 	
-	index = (log2 - MALLOC_MINSIZE_LOG2 + MALLOC_LOG2_INCREMENT - 1) / MALLOC_LOG2_INCREMENT;
+	//so we make 7 add "increment-1" to get result we want 	
+	index = (log2 - MALLOC_MINSIZE_LOG2 + (MALLOC_LOG2_INCREMENT - 1)) / MALLOC_LOG2_INCREMENT;
 
 	return index <= MAX_FREE_LIST_NB - 1 ? index: MAX_FREE_LIST_NB - 1; 	
 }
