@@ -11,6 +11,7 @@
 
 //#define MAX_LENGTH 10*1024*1024 //10MB
 //#define TEST_HUGEPAGE_PATH "/mnt/hugepages/mem0"
+#define TEST_LEN 10
 
 int main(int argc, char** argv){
 	int fd, fd_zero;
@@ -20,7 +21,7 @@ int main(int argc, char** argv){
 	uint32_t ret, i;
 	uint32_t num_pages=0;
 	hugepage_file *tmp_hp;
-
+	uint8_t *test_data;
 ////test read cpuid coreid socketid	
 //	int cpu_id;
 //	uint32_t core_id;
@@ -56,6 +57,7 @@ int main(int argc, char** argv){
 		perror("Malloc error");
 		return 0;
 	}
+	
 	//map all avaliable hugepages
 	ret = map_hugepages(tmp_hp, num_pages, hugepgsz);
 	if(ret != num_pages){
@@ -76,6 +78,34 @@ int main(int argc, char** argv){
 	else
 		printf("Malloc heap init error...\n");
 	show_heaps_state();
+	
+	//init runtime info
+	get_runtime_info();
+	
+	//***test malloc and free API***
+	test_data = (uint8_t *)mem_malloc( TEST_LEN * sizeof(uint8_t), 64);
+	if(test_data == NULL){
+		printf("Malloc error...\n");
+		exit(0);
+	}
+	else
+		printf("Malloc done...\n");
+	
+	for(i=0; i<TEST_LEN; i++)
+		test_data[i] = 'a'+i;
+	printf("test_data:%s\n",test_data);
+	//after malloc heaps' state
+	show_heaps_state();	
+	getchar();
+	mem_free(test_data);
+	test_data = NULL;	
+	printf("Malloc and free test pass...\n");
+	
+	//after free heaps' state
+	show_heaps_state();
+	//***malloc and free test end***
+
+
 /*
 	for(i=0; i<num_pages; i++)
 	{

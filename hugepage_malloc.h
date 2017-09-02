@@ -39,7 +39,7 @@ typedef struct hugepage_malloc_heap hugepage_malloc_heap;
 //API
 uint32_t global_heap_init();
 void show_heaps_state();
-void * mem_alloc(size_t size);
+void * mem_malloc(size_t size, unsigned align);//align must be larger than 0 and power of 2
 void mem_free(void * data);
 
 //global vars

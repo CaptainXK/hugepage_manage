@@ -125,9 +125,11 @@ void show_heaps_state()
 {
 	uint32_t i;
 	for(i=0; i<MAX_SOCKET_NB; i++){
-		printf("heap_%u total_size:%lu using_size:%lu\n\n", i,
+		if(global_malloc_heap[i].total_size > 0){
+			printf("heap_%u total_size:%lu alloc counter:%u\n\n", i,
 												global_malloc_heap[i].total_size,
-												global_malloc_heap[i].using_size);
+												global_malloc_heap[i].alloc_counter);
+		}
 	}
 	return;
 }
@@ -267,7 +269,7 @@ void * malloc_on_heap(hugepage_malloc_heap *heap, size_t size, size_t align)
 	elem = find_suitable_elem(heap, size, align);
 	if(elem != NULL){//if find a suitable elem in current heap, try alloc from it
 		elem = malloc_on_elem(elem, size, align);
-		heap->alloc_counter += 1;
+		heap->alloc_counter += 1;//alloc counter++
 	}
 		
 	//go out critical area and unlock
@@ -365,6 +367,7 @@ int free_elem(hugepage_malloc_elem *elem)
 	memset(ptr,0,data_sz);
 	
 	cus_spinlock_unlock(&elem->heap->heap_lock);
+	return 0;
 }
 
 //get elem from given data addr
