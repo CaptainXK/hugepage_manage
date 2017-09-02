@@ -385,7 +385,7 @@ uint32_t munmap_all_hugepages(hugepage_file *hpf, uint32_t page_number)
 //merge pages to segments
 uint32_t pages_to_memsegs(hugepage_file *hpf, uint32_t page_number)
 {
-	uint32_t i=0, j=0;
+	uint32_t i=0, j=-1;
 	bool is_new_memseg;
 	
 	for(i=0; i<page_number; i++){
@@ -402,13 +402,15 @@ uint32_t pages_to_memsegs(hugepage_file *hpf, uint32_t page_number)
 			is_new_memseg = 1;
 		
 		if(is_new_memseg){
+			j++;
 			global_memseg[j].phys_addr = hpf[i].physaddr;
 			global_memseg[j].addr = hpf[i].addr;
 			global_memseg[j].len = hpf[i].pagesize;
 			global_memseg[j].socket_id = hpf[i].socket_id;
 			global_memseg[j].hugepage_sz = hpf[i].pagesize; 
 			hpf[i].memseg_id = j;
-			j ++;
+			//j ++;//if j ++ here, if next page is in the same memseg in the next loop,
+				   //the (j+1)th memseg's len will be added by pagesize instead of jth memsegs
 		}
 		else{
 			global_memseg[j].len += hpf[i].pagesize;
@@ -419,7 +421,21 @@ uint32_t pages_to_memsegs(hugepage_file *hpf, uint32_t page_number)
 		printf("Can not merge all hugepages...\n");
 		munmap_all_hugepages(hpf, page_number);
 	}
-	nb_memsegs = j;
+	nb_memsegs = j+1;
 	return i;
 }
 
+//print memsegse state
+void show_memsegs_state()
+{
+	uint32_t i=0;
+	size_t total_size=0;
+
+	for(i=0; i<nb_memsegs; i++)
+	{
+		printf("%uth memseg size=%lu\n",i, global_memseg[i].len);
+		total_size += global_memseg[i].len;
+	}
+	printf("Total size:%lu\n",total_size);
+	return;
+}

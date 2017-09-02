@@ -120,15 +120,46 @@ uint32_t global_heap_init()
 		return 0;
 }
 
+//print heaps' free_list state
+void show_heap_free_list(const hugepage_malloc_heap * const heap, int idx)
+{
+	if(idx < 0 || idx >= MAX_FREE_LIST_NB)
+		return;
+	hugepage_malloc_elem *elem;
+	int is_1th_elem = 0;
+	int th=0;	
+
+//	for(elem = LIST_FIRST(&heap->free_head[idx]);
+////						  elem != NULL; 
+//						  !!elem;
+//						  elem = LIST_NEXT(elem, free_list))
+	LIST_FOREACH(elem, &heap->free_head[idx], free_list)
+	{
+		if(is_1th_elem == 0){
+			printf("Free_list_%d:",idx);
+			printf("[elem%d-size:%lu]", th++, elem->size);
+			is_1th_elem = 1;
+		}
+		else{
+			printf("->[elem%d-size:%lu]", th++, elem->size);
+		}
+	}
+	if(th != 0)
+		printf("\n");
+}
+
 //print current heaps' state
 void show_heaps_state()
 {
-	uint32_t i;
+	uint32_t i,j;
 	for(i=0; i<MAX_SOCKET_NB; i++){
 		if(global_malloc_heap[i].total_size > 0){
-			printf("heap_%u total_size:%lu alloc counter:%u\n\n", i,
+			printf("heap_%u total_size:%lu alloc_counter:%u\n", i,
 												global_malloc_heap[i].total_size,
 												global_malloc_heap[i].alloc_counter);
+			for(j=0; j<MAX_FREE_LIST_NB; j++){
+				show_heap_free_list(&global_malloc_heap[i], j);	
+			}
 		}
 	}
 	return;
@@ -167,8 +198,11 @@ hugepage_malloc_elem* find_suitable_elem(hugepage_malloc_heap *heap, size_t size
 	for(idx = find_free_list_idx(size);
 			idx<MAX_FREE_LIST_NB; idx++)
 	{
-		for(elem = LIST_FIRST(&heap->free_head[idx]);//start from first elem of current free list 
-				elem != NULL; elem = LIST_NEXT(elem, free_list))
+	//	for(elem = LIST_FIRST(&heap->free_head[idx]);//start from first elem of current free list 
+	//	//	elem != NULL; 
+	//		!!elem;
+	//		elem = LIST_NEXT(elem, free_list))
+		LIST_FOREACH(elem, &heap->free_head[idx], free_list)
 		{
 			if(elem_fit_size(elem, size, align) == 1){
 				return elem;
@@ -222,6 +256,7 @@ hugepage_malloc_elem* malloc_on_elem(hugepage_malloc_elem *elem, size_t size,
 	//some addr space will be left because of align_floor
 	//if the align value is large enough, the trailer space may be larger than HEADER+MIN_DATA_SIZE(64)
 	//if it is the case, split it and re-insert trailer into free_list
+	malloc_elem_remove(elem);
 	if( trailer_size >= MIN_ELEM_SIZE )
 	{
 		struct hugepage_malloc_elem *new_free_elem = PTR_ADD(new_elem, size + ELEM_HEADER_SIZE);
