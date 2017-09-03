@@ -18,5 +18,6 @@ fi
 mount -t hugetlbfs nodev "$huge_mnt_path"
 echo "Size of current system's hugepage is ${HUGEPGSZ}"
 echo "Input number of pages:"
-read pages 
+read pages
+echo "${pages}" 
 echo $pages > /proc/sys/vm/nr_hugepages

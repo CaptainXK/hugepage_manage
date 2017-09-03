@@ -86,7 +86,7 @@ int main(int argc, char** argv){
 	get_runtime_info();
 	
 	//***test malloc and free API***
-	test_data = (uint8_t *)mem_malloc( TEST_LEN * sizeof(uint8_t), 64);
+	test_data = (uint8_t *)mem_malloc( TEST_LEN * sizeof(uint8_t), 0);
 	if(test_data == NULL){
 		printf("Malloc error...\n");
 		exit(0);

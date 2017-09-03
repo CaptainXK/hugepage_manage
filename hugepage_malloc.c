@@ -323,10 +323,10 @@ void * malloc_on_socket(size_t size, unsigned align, int socket_id)
 	void *ret;
 
 	//check if size is not 0 and align is power of 2
-	if( size == 0 || (align <=0 && !is_power_of_two(align)) )
+	if( size == 0 || (align > 0 && !is_power_of_two(align)) )
 		return NULL;
 
-	ret = malloc_on_heap(&global_malloc_heap[socket_id], size, align);
+	ret = malloc_on_heap(&global_malloc_heap[socket_id], size, align == 0 ? 1 : align);
 	
 	if(ret != NULL)
 		return ret;
@@ -337,7 +337,7 @@ void * malloc_on_socket(size_t size, unsigned align, int socket_id)
 		//tried this socket already before
 		if( i == socket_id )
 			continue;	
-		ret = malloc_on_heap(&global_malloc_heap[i], size, align);
+		ret = malloc_on_heap(&global_malloc_heap[i], size, align == 0 ? 1 : align);
 		if( ret != NULL)
 			return ret;
 	}	
