@@ -274,7 +274,7 @@ hugepage_malloc_elem* malloc_on_elem(hugepage_malloc_elem *elem, size_t size,
 		elem->state = ELEM_BUSY;
 		elem->pad = old_elem_size;
 		if(old_elem_size>0){
-			new_elem->pad = elem->pad;
+			new_elem->pad = elem->pad;//new_elem's addr minus pad is the original elem start addr
 			new_elem->state = ELEM_PAD;
 			new_elem->size = elem->size - elem->pad;
 		}

@@ -318,7 +318,7 @@ uint32_t map_hugepages(hugepage_file *hpf, uint32_t number, uint64_t hugepage_sz
 		hpf[i].addr = NULL;
 		hpf[i].addr = virtaddr;
 	    vma_len -= hugepage_sz;
-		vma_addr = (char *)vma_addr + hugepage_sz;	
+		vma_addr = (char *)vma_addr + hugepage_sz;//modify the last virt_addr mmap hint	
 	}
 
 	return i;
